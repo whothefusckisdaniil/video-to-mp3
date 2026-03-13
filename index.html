@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Конвертер в MP3</title>
+    
+    <!-- Подключение Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Подключение lamejs для кодирования -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js"></script>
+    
+    <!-- Иконки -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        :root {
+            --ios-bg: #F2F2F7;
+            --ios-card: #FFFFFF;
+            --ios-blue: #007AFF;
+            --ios-text: #000000;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+            background-color: var(--ios-bg);
+            color: var(--ios-text);
+            -webkit-font-smoothing: antialiased;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .ios-nav {
+            background-color: rgba(249, 249, 249, 0.75);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 0.5px solid rgba(0, 0, 0, 0.15);
+        }
+
+        .ios-card {
+            background-color: var(--ios-card);
+            border-radius: 10px;
+        }
+
+        .ios-btn {
+            transition: all 0.2s ease;
+        }
+        .ios-btn:active {
+            transform: scale(0.97);
+            opacity: 0.8;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .progress-track {
+            background-color: #E5E5EA;
+            border-radius: 4px;
+            overflow: hidden;
+            height: 4px;
+            width: 100%;
+        }
+        
+        .progress-fill {
+            background-color: var(--ios-blue);
+            height: 100%;
+            width: 0%;
+            transition: width 0.1s linear;
+        }
+
+        .fade-in {
+            animation: fadeIn 0.3s ease-out forwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Стили для iOS Segmented Control */
+        .segmented-control {
+            background-color: #EEEEF0;
+            padding: 2px;
+            border-radius: 8px;
+            display: flex;
+            position: relative;
+            width: 100%;
+        }
+        
+        .segment-btn {
+            flex: 1;
+            text-align: center;
+            font-size: 13px;
+            font-weight: 500;
+            padding: 5px 0;
+            color: #000;
+            z-index: 10;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .segment-slider {
+            position: absolute;
+            top: 2px;
+            bottom: 2px;
+            left: 2px;
+            width: calc(33.333% - 1.33px);
+            background: #fff;
+            border-radius: 6px;
+            box-shadow: 0 3px 1px rgba(0,0,0,0.04), 0 3px 8px rgba(0,0,0,0.12);
+            transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.4, 1);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <header class="ios-nav fixed top-0 w-full z-10 pt-safe flex items-center justify-center h-14">
+        <h1 class="text-[17px] font-semibold tracking-tight">Конвертер Pro</h1>
+    </header>
+
+    <main class="flex-1 px-4 pt-20 pb-8 flex flex-col items-center max-w-md mx-auto w-full">
+        
+        <p id="instruction-text" class="text-[13px] text-[#8E8E93] uppercase tracking-wide w-full px-4 mb-2 mt-4">Медиафайл</p>
+
+        <div class="ios-card w-full mb-6 overflow-hidden">
+            <!-- Выбор файла -->
+            <label id="upload-area" for="file-input" class="flex flex-col items-center justify-center py-10 px-4 cursor-pointer active:bg-gray-50 transition-colors">
+                <i data-lucide="video" class="w-12 h-12 text-[#007AFF] mb-3"></i>
+                <span class="text-[17px] text-[#007AFF] font-normal">Выбрать видео</span>
+            </label>
+            <input type="file" id="file-input" accept="video/*" />
+
+            <!-- Информация о файле -->
+            <div id="file-info" class="hidden flex-col items-center py-6 px-4">
+                <div class="w-14 h-14 bg-gray-100 rounded-xl flex items-center justify-center mb-3">
+                    <i data-lucide="film" class="w-7 h-7 text-gray-700"></i>
+                </div>
+                <h2 id="file-name" class="text-[17px] font-medium text-center truncate w-full px-2">video.mp4</h2>
+                <p id="file-size" class="text-[15px] text-[#8E8E93] mt-1">0 МБ</p>
+                <button id="reselect-btn" class="text-[15px] text-[#007AFF] mt-4 active:opacity-50">Изменить видео</button>
+            </div>
+        </div>
+
+        <!-- Настройки качества (Появляются после выбора файла) -->
+        <div id="quality-settings" class="w-full hidden mb-6 fade-in">
+            <p class="text-[13px] text-[#8E8E93] uppercase tracking-wide px-4 mb-2">Качество звука</p>
+            <div class="ios-card p-4">
+                <div class="segmented-control">
+                    <!-- Ползунок-подложка -->
+                    <div id="segment-slider" class="segment-slider" style="transform: translateX(200%);"></div>
+                    
+                    <!-- Кнопки -->
+                    <div class="segment-btn" data-kbps="128" data-idx="0">128 kbps</div>
+                    <div class="segment-btn" data-kbps="192" data-idx="1">192 kbps</div>
+                    <div class="segment-btn" data-kbps="320" data-idx="2">320 kbps</div>
+                </div>
+                <p class="text-[12px] text-center text-[#8E8E93] mt-3">320 kbps — максимальное качество (занимает больше места).</p>
+            </div>
+        </div>
+
+        <!-- Прогресс -->
+        <div id="progress-container" class="w-full hidden mb-6 px-2 fade-in">
+            <div class="flex justify-between items-end mb-2">
+                <span id="status-text" class="text-[13px] font-medium text-gray-700">Извлечение аудио...</span>
+                <span id="progress-percent" class="text-[13px] text-[#8E8E93] font-variant-numeric">0%</span>
+            </div>
+            <div class="progress-track">
+                <div id="progress-bar" class="progress-fill"></div>
+            </div>
+        </div>
+
+        <!-- Кнопки действий -->
+        <button id="convert-btn" class="ios-btn hidden w-full bg-[#007AFF] text-white rounded-[14px] py-[14px] text-[17px] font-semibold shadow-sm mb-4">
+            Конвертировать
+        </button>
+
+        <a id="download-btn" class="ios-btn hidden w-full bg-[#34C759] text-white rounded-[14px] py-[14px] text-[17px] font-semibold shadow-sm text-center mb-4 fade-in" download="converted.mp3">
+            Сохранить MP3
+        </a>
+
+    </main>
+
+    <script>
+        lucide.createIcons();
+
+        // DOM Элементы
+        const fileInput = document.getElementById('file-input');
+        const uploadArea = document.getElementById('upload-area');
+        const fileInfo = document.getElementById('file-info');
+        const fileNameEl = document.getElementById('file-name');
+        const fileSizeEl = document.getElementById('file-size');
+        const reselectBtn = document.getElementById('reselect-btn');
+        const convertBtn = document.getElementById('convert-btn');
+        const downloadBtn = document.getElementById('download-btn');
+        const progressContainer = document.getElementById('progress-container');
+        const progressBar = document.getElementById('progress-bar');
+        const progressPercent = document.getElementById('progress-percent');
+        const statusText = document.getElementById('status-text');
+        const qualitySettings = document.getElementById('quality-settings');
+        const instructionText = document.getElementById('instruction-text');
+        
+        // Логика Segmented Control (Выбор качества)
+        const segments = document.querySelectorAll('.segment-btn');
+        const slider = document.getElementById('segment-slider');
+        let selectedKbps = 320; // По умолчанию наилучшее качество
+
+        segments.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const idx = parseInt(e.target.dataset.idx);
+                selectedKbps = parseInt(e.target.dataset.kbps);
+                // Анимация ползунка (перемещение на 0%, 100% или 200% от своей ширины)
+                slider.style.transform = `translateX(${idx * 100}%)`;
+            });
+        });
+
+        let currentFile = null;
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Б', 'КБ', 'МБ', 'ГБ'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            currentFile = file;
+            fileNameEl.textContent = file.name;
+            fileSizeEl.textContent = formatBytes(file.size);
+            
+            uploadArea.classList.add('hidden');
+            fileInfo.classList.remove('hidden');
+            fileInfo.classList.add('flex');
+            
+            qualitySettings.classList.remove('hidden');
+            convertBtn.classList.remove('hidden');
+            downloadBtn.classList.add('hidden');
+            progressContainer.classList.add('hidden');
+            
+            instructionText.textContent = "Готово к конвертации";
+        });
+
+        reselectBtn.addEventListener('click', () => fileInput.click());
+
+        convertBtn.addEventListener('click', async () => {
+            if (!currentFile) return;
+
+            convertBtn.classList.add('hidden');
+            qualitySettings.classList.add('hidden'); // Скрываем настройки при процессе
+            reselectBtn.classList.add('hidden');
+            progressContainer.classList.remove('hidden');
+            downloadBtn.classList.add('hidden');
+            
+            progressBar.style.width = '0%';
+            progressPercent.textContent = '0%';
+            instructionText.textContent = "Обработка";
+
+            try {
+                statusText.textContent = 'Чтение файла...';
+                const arrayBuffer = await currentFile.arrayBuffer();
+
+                statusText.textContent = 'Извлечение аудио (44.1 kHz)...';
+                progressBar.style.width = '10%';
+                
+                // ПРО улучшение 1: Используем OfflineAudioContext для принудительного стандарта 44100 Гц.
+                // Это исключает баги со скоростью воспроизведения на специфичных устройствах.
+                const offlineCtx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(2, 1, 44100);
+                
+                const audioBuffer = await new Promise((resolve, reject) => {
+                    offlineCtx.decodeAudioData(arrayBuffer, resolve, reject);
+                });
+
+                statusText.textContent = `Кодирование в MP3 (${selectedKbps} kbps)...`;
+                
+                // Конвертация
+                const mp3Blob = await encodeToMp3(audioBuffer, selectedKbps, (progress) => {
+                    const currentProgress = 10 + (progress * 90);
+                    progressBar.style.width = `${currentProgress}%`;
+                    progressPercent.textContent = `${Math.round(currentProgress)}%`;
+                });
+
+                statusText.textContent = 'Готово!';
+                progressBar.style.width = '100%';
+                progressPercent.textContent = '100%';
+
+                const url = URL.createObjectURL(mp3Blob);
+                downloadBtn.href = url;
+                downloadBtn.download = currentFile.name.replace(/\.[^/.]+$/, "") + ".mp3";
+                
+                setTimeout(() => {
+                    progressContainer.classList.add('hidden');
+                    downloadBtn.classList.remove('hidden');
+                    reselectBtn.classList.remove('hidden');
+                    qualitySettings.classList.remove('hidden');
+                    instructionText.textContent = "Успешно";
+                }, 1000);
+
+            } catch (error) {
+                console.error(error);
+                alert("Ошибка конвертации. Возможно формат не поддерживается.");
+                convertBtn.classList.remove('hidden');
+                qualitySettings.classList.remove('hidden');
+                reselectBtn.classList.remove('hidden');
+                progressContainer.classList.add('hidden');
+                instructionText.textContent = "Ошибка";
+            }
+        });
+
+        // Функция кодирования с защитой от клиппинга
+        async function encodeToMp3(audioBuffer, kbps, onProgress) {
+            const channels = audioBuffer.numberOfChannels;
+            // sampleRate гарантированно 44100 благодаря OfflineAudioContext
+            const sampleRate = audioBuffer.sampleRate; 
+            
+            const mp3encoder = new lamejs.Mp3Encoder(channels, sampleRate, kbps);
+            
+            let left = audioBuffer.getChannelData(0);
+            let right = channels > 1 ? audioBuffer.getChannelData(1) : left;
+
+            const sampleBlockSize = 1152;
+            const mp3Data = [];
+
+            // ПРО улучшение 2: Защита от клиппинга (хрипов)
+            function floatToInt16(floatArray) {
+                const intArray = new Int16Array(floatArray.length);
+                for (let i = 0; i < floatArray.length; i++) {
+                    // Умножаем на 0.99 (оставляем 1% запаса громкости, чтобы MP3 энкодер не "захлебывался")
+                    let s = Math.max(-1, Math.min(1, floatArray[i] * 0.99));
+                    // Правильное распределение битности
+                    intArray[i] = s < 0 ? s * 32768 : s * 32767;
+                }
+                return intArray;
+            }
+
+            const leftInt = floatToInt16(left);
+            const rightInt = floatToInt16(right);
+
+            const length = leftInt.length;
+            let offset = 0;
+
+            while (offset < length) {
+                const end = Math.min(offset + sampleBlockSize * 100, length); 
+                const leftChunk = leftInt.subarray(offset, end);
+                const rightChunk = rightInt.subarray(offset, end);
+
+                let mp3buf;
+                if (channels === 2) {
+                    mp3buf = mp3encoder.encodeBuffer(leftChunk, rightChunk);
+                } else {
+                    mp3buf = mp3encoder.encodeBuffer(leftChunk);
+                }
+
+                if (mp3buf.length > 0) mp3Data.push(mp3buf);
+
+                offset = end;
+                onProgress(offset / length);
+                
+                await new Promise(r => setTimeout(r, 0)); 
+            }
+
+            const mp3buf = mp3encoder.flush();
+            if (mp3buf.length > 0) mp3Data.push(mp3buf);
+
+            return new Blob(mp3Data, { type: 'audio/mp3' });
+        }
+    </script>
+</body>
+</html>
